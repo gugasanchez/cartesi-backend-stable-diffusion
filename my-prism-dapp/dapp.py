@@ -4,6 +4,10 @@ import requests
 import json
 from PIL import Image
 from io import BytesIO
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level="INFO")
@@ -14,7 +18,9 @@ rollup_server = environ["ROLLUP_HTTP_SERVER_URL"]
 logger.info(f"HTTP rollup_server url is {rollup_server}")
 
 # Stability AI API key and URL
-STABILITY_API_KEY = "sk-YOUR_STABILITY_API_KEY"  # Replace with your actual API key
+STABILITY_API_KEY = os.getenv("STABILITY_API_KEY")
+if not STABILITY_API_KEY:
+    raise ValueError("No API key found. Please set the STABILITY_API_KEY environment variable.")
 STABILITY_API_URL = "https://api.stability.ai/v2beta/stable-image/generate/sd3"
 
 def generate_image(prompt, model="sd3-large", output_format="jpeg"):
