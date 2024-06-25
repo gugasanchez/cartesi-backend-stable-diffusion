@@ -23,6 +23,7 @@ ENV PATH="/opt/cartesi/bin:${PATH}"
 
 WORKDIR /opt/cartesi/dapp
 
+# Copy the requirements file and install dependencies
 COPY ./requirements.txt .
 
 RUN <<EOF
@@ -31,9 +32,10 @@ pip install -r requirements.txt --no-cache
 find /usr/local/lib -type d -name __pycache__ -exec rm -r {} +
 EOF
 
+# Copy the application code
 COPY ./dapp.py .
-COPY .env .
 
+ENV STABILITY_API_KEY="sk-Ij05VahOIcdz1EkEr9y5ABqEp2pWuqBaumUJ42WyaDcO1qUS"
 ENV ROLLUP_HTTP_SERVER_URL="http://127.0.0.1:5004"
 
 ENTRYPOINT ["rollup-init"]

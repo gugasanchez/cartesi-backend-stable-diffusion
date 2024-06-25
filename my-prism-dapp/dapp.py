@@ -2,90 +2,75 @@ from os import environ
 import logging
 import requests
 import json
-from PIL import Image
-from io import BytesIO
-from dotenv import load_dotenv
+import base64
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Configure logging
 logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
 
-# Retrieve the rollup server URL from environment variables
 rollup_server = environ["ROLLUP_HTTP_SERVER_URL"]
 logger.info(f"HTTP rollup_server url is {rollup_server}")
 
-# Stability AI API key and URL
-STABILITY_API_KEY = os.getenv("STABILITY_API_KEY")
-if not STABILITY_API_KEY:
-    raise ValueError("No API key found. Please set the STABILITY_API_KEY environment variable.")
+# Stability AI API URL and API key
 STABILITY_API_URL = "https://api.stability.ai/v2beta/stable-image/generate/sd3"
+STABILITY_API_KEY = environ["STABILITY_API_KEY"]
 
-def generate_image(prompt, model="sd3-large", output_format="jpeg"):
-    """
-    Generates an image using the Stability AI API.
-    :param prompt: The text prompt to generate the image.
-    :param model: The model to use for generation (default is "sd3-large").
-    :param output_format: The format of the output image (default is "jpeg").
-    :return: Path to the saved image if successful, None otherwise.
-    """
-    headers = {
-        "authorization": f"Bearer {STABILITY_API_KEY}",
-        "accept": "image/*"
-    }
-    data = {
-        "prompt": prompt,
-        "model": model,
-        "output_format": output_format
-    }
-    response = requests.post(STABILITY_API_URL, headers=headers, data=data)
+# Ensure that both environment variables are set
+if not rollup_server:
+    raise EnvironmentError("ROLLUP_HTTP_SERVER_URL environment variable not set")
+if not STABILITY_API_KEY:
+    raise EnvironmentError("STABILITY_API_KEY environment variable not set")
+
+def generate_image(prompt):
+    response = requests.post(
+        STABILITY_API_URL,
+        headers={
+            "authorization": f"Bearer {STABILITY_API_KEY}",
+            "accept": "application/json"
+        },
+        files={"none": ''},
+        data={
+            "prompt": prompt,
+        },
+    )
 
     if response.status_code == 200:
-        # Open the image and save it to a file
-        image = Image.open(BytesIO(response.content))
-        image_path = "/opt/cartesi/dapp/generated_image.jpeg"
-        image.save(image_path)
-        return image_path
+        response_data = response.json()
+        image_base64 = response_data.get("image")
+        if image_base64:
+            return image_base64
+        else:
+            logger.error("No image returned in the response")
+            return None
     else:
         logger.error(f"Failed to generate image: {response.status_code}, {response.text}")
         return None
 
 def handle_advance(data):
-    """
-    Handles the 'advance_state' request. Generates an image based on the prompt provided in the data.
-    :param data: JSON string containing the request data.
-    :return: "accept" if the image is generated successfully, "reject" otherwise.
-    """
     logger.info(f"Received advance request data {data}")
-    try:
-        input_data = json.loads(data)
-        prompt = input_data.get("prompt")
-        if prompt:
-            image_path = generate_image(prompt)
-            if image_path:
-                logger.info(f"Image generated and saved at {image_path}")
-                return "accept"
-            else:
-                return "reject"
-        else:
-            logger.error("No prompt provided")
-            return "reject"
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode JSON: {str(e)}")
+
+    # Decode hex payload to string
+    payload_hex = data["payload"]
+    payload_bytes = bytes.fromhex(payload_hex[2:])  # Remove '0x' prefix and convert to bytes
+    prompt = payload_bytes.decode('utf-8')
+    logger.info(f"Decoded prompt: {prompt}")
+
+    # Generate image
+    image_base64 = generate_image(prompt)
+    if image_base64:
+        # image_path = "/opt/cartesi/dapp/generated_image.txt"
+        # with open(image_path, "w") as file:
+        #     file.write(image_base64)
+        # logger.info(f"Image generated and saved at {image_path}")
+        return "accept"
+    else:
         return "reject"
 
+
 def handle_inspect(data):
-    """
-    Handles the 'inspect_state' request. Currently, it simply logs the request data.
-    :param data: JSON string containing the request data.
-    :return: "accept" indicating that the request is handled.
-    """
     logger.info(f"Received inspect request data {data}")
     return "accept"
 
-# Map request types to their handlers
+
 handlers = {
     "advance_state": handle_advance,
     "inspect_state": handle_inspect,
